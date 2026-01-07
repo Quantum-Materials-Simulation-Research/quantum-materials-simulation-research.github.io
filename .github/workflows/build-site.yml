@@ -1,0 +1,246 @@
+name: Build & Deploy repos Site
+
+env:
+  SITE_TEMPLATE_PATH: ".github/templates/site"
+
+on:
+  workflow_call:
+    inputs:
+      site_title:
+        type: string
+        required: false
+        default: ""
+      execute:
+        type: string
+        required: false
+        default: "false"
+      template_repo:
+        type: string
+        required: false
+        default: "Academic-Codex/academic-codex.github.io"
+      template_ref:
+        type: string
+        required: false
+        default: "main"
+      placeholders_path:
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "build-pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Provisioner GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.PROVISIONER_APP_ID }}
+          private-key: ${{ secrets.PROVISIONER_PRIVATE_KEY_PEM }}
+
+      - name: Checkout discipline repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout central (template + scripts + registry)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.template_repo }}
+          ref: ${{ inputs.template_ref }}
+          path: central
+          sparse-checkout: |
+            .github/templates
+            .github/scripts/build_site.py
+            .github/registry
+          sparse-checkout-cone-mode: false
+
+      - name: Validate template path
+        run: |
+          set -euo pipefail
+          TEMPLATE_DIR="central/${{ env.SITE_TEMPLATE_PATH }}"
+          echo "TEMPLATE_DIR=$TEMPLATE_DIR"
+          test -f "$TEMPLATE_DIR/index.html" || { echo "index.html não encontrado em $TEMPLATE_DIR"; ls -laR central; exit 1; }
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install nbconvert jinja2 nbformat pyyaml
+
+      - name: Copy template from central
+        run: |
+          set -euo pipefail
+          rm -rf template
+          rsync -a --delete "central/${{ env.SITE_TEMPLATE_PATH }}/" "template/"
+
+      - name: Resolve config from central registry
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, sys, yaml
+          from pathlib import Path
+
+          full = (os.environ.get("GITHUB_REPOSITORY") or "").strip()
+          if "/" not in full:
+            print(f"[fatal] invalid GITHUB_REPOSITORY={full}", file=sys.stderr)
+            sys.exit(2)
+
+          owner, repo = full.split("/", 1)  # runtime truth (casing exato)
+
+          # defaults 100% runtime (não dependem de YAML)
+          site_url   = f"https://{owner}.github.io/" if repo == f"{owner}.github.io" else f"https://{owner}.github.io/{repo}"
+          github_url = f"https://github.com/{owner}/{repo}"
+
+          # tenta enriquecer com registry, mas NUNCA falha por isso
+          hit = None
+          reg = Path("central/.github/registry/repos.yml")
+          if reg.exists():
+            data = yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+            items = data.get("repos", [])
+            if isinstance(items, list):
+              owner_l = owner.lower()
+              repo_l  = repo.lower()
+              hit = next((it for it in items
+                          if str(it.get("org","")).lower() == owner_l
+                          and str(it.get("name","")).lower() == repo_l), None)
+
+          if not hit:
+            print(f"[warn] repo {owner}/{repo} not found in registry (using runtime defaults).", file=sys.stderr)
+            hit = {}
+
+          # Helpers simples
+          def split_title(repo_name: str, title: str | None):
+            # Ex: "SCE0602-Introducao-Ciencia-Da-Computacao-II"
+            # -> ("SCE0602", "Introducao Ciencia Da Computacao II")
+            parts = (repo_name or "").split("-", 1)
+            code = parts[0] if parts else repo_name
+            pretty = (title or (parts[1] if len(parts) > 1 else repo_name) or repo_name)
+            pretty = pretty.replace("-", " ").strip()
+            return code, pretty
+
+          # runtime truth
+          code, pretty = split_title(repo, hit.get("title"))
+
+          # Subtitle defaults: area + level (se existirem)
+          area = (hit.get("academic_area") or "").strip()
+
+          level_raw = (hit.get("academic_level") or "").strip()
+          level = ""
+          if level_raw:
+              lvl = level_raw.lower()
+              if lvl == "undergrad":
+                  level = "Undergraduate Course"
+              elif lvl == "grad":
+                  level = "Graduate Course"
+              else:
+                  # fallback elegante para valores inesperados
+                  level = f"{level_raw.capitalize()} Course"
+    
+          out = {
+            # === TOKENS QUE O TEMPLATE USA ===
+            "TITLE_1": code,
+            "TITLE_2": pretty,
+            "SUBTITLE_1": area,
+            "SUBTITLE_2": level,
+            "ABOUT": hit.get("site_description") or hit.get("about") or "",
+
+            # link do botão "GitHub"
+            "GITHUB_LINK": github_url,
+
+            # se o template tiver botões com o site
+            "SITE_URL": hit.get("site_url") or site_url,
+
+            # hero
+            "HERO_FILE": hit.get("site_hero_image") or "",
+          }
+
+          Path("_cfg").mkdir(exist_ok=True)
+          Path("_cfg/site.yml").write_text(
+            yaml.safe_dump(out, sort_keys=False, allow_unicode=True),
+            encoding="utf-8"
+          )
+          print("[ok] wrote _cfg/site.yml")
+          print(f"[dbg] runtime repo = {owner}/{repo}", file=sys.stderr)
+          print(f"[dbg] site_url     = {out['SITE_URL']}", file=sys.stderr)
+          PY
+
+      - name: Fetch hero image (from central)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          HERO_DIR_IN_CENTRAL="img/portfolio"
+          BASE_RAW="https://raw.githubusercontent.com/${{ inputs.template_repo }}/${{ inputs.template_ref }}"
+
+          python - <<'PY' > hero_file.txt
+          import yaml
+          from pathlib import Path
+          cfg = yaml.safe_load(Path("_cfg/site.yml").read_text(encoding="utf-8")) or {}
+          print((cfg.get("HERO_FILE") or "").strip())
+          PY
+
+          HERO_FILE="$(cat hero_file.txt || true)"
+          if [ -z "$HERO_FILE" ]; then
+            echo "Sem HERO_FILE → usando placeholder."
+            HERO_FILE="placeholder.jpg"
+          fi
+
+          mkdir -p template/assets/img
+
+          HERO_URL="$BASE_RAW/$HERO_DIR_IN_CENTRAL/$HERO_FILE"
+          echo "Baixando hero: $HERO_URL"
+
+          # tenta baixar hero; se falhar (404 etc), cai no placeholder
+          if ! curl -fsSL "$HERO_URL" -o template/assets/img/hero.png; then
+            FALLBACK_URL="$BASE_RAW/$HERO_DIR_IN_CENTRAL/placeholder.jpg"
+            echo "Hero não encontrada. Fallback: $FALLBACK_URL"
+            curl -fsSL "$FALLBACK_URL" -o template/assets/img/hero.png
+          fi
+
+          # sempre aponta pro arquivo local que acabamos de salvar
+          sed -i.bak 's#{{ *HERO_URL *}}#./assets/img/hero.png#g' template/index.html
+
+      - name: Build site
+        run: |
+          python central/.github/scripts/build_site.py \
+            --src . \
+            --out site \
+            --template template \
+            --title "${{ inputs.site_title }}" \
+            --cfg "_cfg" \
+            --execute ${{ inputs.execute }}
+
+      - name: Show site tree
+        run: |
+          echo "== Conteúdo da pasta site =="
+          ls -lah site || true
+          echo "== Estrutura de arquivos =="
+          find site -maxdepth 3 -type f | sort
+
+      - name: Configure git identity (GitHub App)
+        run: |
+          git config user.name "academic-codex-provisioner-app[bot]"
+          git config user.email "academic-codex-provisioner-app[bot]@users.noreply.github.com"
+        
+        
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          force_orphan: true
