@@ -9,13 +9,13 @@ repos:
     name: variational-approximation
     id: Variational Approximation
     title: "Research"
-    academic_level: 
-    academic_area: 
+    academic_level: graduate
+    academic_area: Materials Science
     academic_school: IF/USP
     status: 
     completed_on: 
     site_hero_image: variational-approximation.png
-    site_description:
+    site_description: Notebooks.
     readme_tagline:
     readme_cta_text: "Research notebooks"
     readme_theme: minimal
@@ -24,8 +24,8 @@ repos:
     name: quantum-chemistry
     id: Quantum Chemistry
     title: "Research"
-    academic_level: 
-    academic_area: 
+    academic_level: graduate
+    academic_area: Materials Science
     academic_school: IF/USP
     status: 
     completed_on: 
@@ -39,8 +39,8 @@ repos:
     name: quantum-monte-carlo
     id: Quantum Monte Carlo
     title: "Research"
-    academic_level: 
-    academic_area: 
+    academic_level: graduate
+    academic_area: Materials Science
     academic_school: IF/USP
     status: 
     completed_on: 
@@ -54,8 +54,8 @@ repos:
     name: quantum-neural-state
     id: Quantum Neural State
     title: "Research"
-    academic_level: 
-    academic_area: 
+    academic_level: graduate
+    academic_area: Materials Science
     academic_school: IF/USP
     status: 
     completed_on: 
