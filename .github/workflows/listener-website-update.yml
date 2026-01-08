@@ -1,6 +1,9 @@
 name: Listener Update Websites
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       target:
