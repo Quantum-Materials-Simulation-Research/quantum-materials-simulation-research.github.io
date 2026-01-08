@@ -17,7 +17,7 @@ repos:
     site_hero_image: variational-approximation.png
     site_description:
     readme_tagline:
-    readme_cta_text: "Open full course website."
+    readme_cta_text: "Research notebooks"
     readme_theme: minimal
 
   - org: Quantum-Materials-Simulation-Research
@@ -32,7 +32,7 @@ repos:
     site_hero_image: quantum-chemistry.png
     site_description:
     readme_tagline:
-    readme_cta_text: "Open full course website."
+    readme_cta_text: "Research notebooks"
     readme_theme: minimal
 
   - org: Quantum-Materials-Simulation-Research
@@ -47,7 +47,7 @@ repos:
     site_hero_image: quantum-monte-carlo.png
     site_description:
     readme_tagline:
-    readme_cta_text: "Open full course website."
+    readme_cta_text: "Research notebooks"
     readme_theme: minimal
 
   - org: Quantum-Materials-Simulation-Research
@@ -62,5 +62,5 @@ repos:
     site_hero_image: quantum-neural-state.png
     site_description:
     readme_tagline:
-    readme_cta_text: "Open full course website."
+    readme_cta_text: "Research notebooks"
     readme_theme: minimal
