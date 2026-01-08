@@ -7,7 +7,7 @@ alt: image-alt
 project-date: April 2024 - Now
 # client: Start Bootstrap
 category: Metodological Research
-link: /Error-Mitigation
+link: /quantum-error-mitigation
 description: 
 
 ---

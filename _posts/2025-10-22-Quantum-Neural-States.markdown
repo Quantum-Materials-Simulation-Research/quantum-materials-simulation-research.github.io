@@ -7,7 +7,7 @@ alt: image-alt
 project-date: April 2023 - Now
 # client: Start Bootstrap
 category: Metodological Research
-link: /Quantum-Neural-States
+link: /quantum-neural-state
 description: 
 
 ---

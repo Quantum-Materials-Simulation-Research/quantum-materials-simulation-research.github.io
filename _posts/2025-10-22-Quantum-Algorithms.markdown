@@ -7,7 +7,7 @@ alt: image-alt
 project-date: April 2024 - Now
 # client: Start Bootstrap
 category: Metodological Research
-link: /Quantum-Algorithms
+link: /quantum-algorithms
 description: 
 
 ---
